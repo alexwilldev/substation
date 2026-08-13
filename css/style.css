@@ -90,11 +90,12 @@ html, body {
 }
 .tab-btn.about-btn { margin-left: auto; }
 
-.tab-content { display: none; height: calc(100vh - 47px); }
-.tab-content.active { display: block; }
+.tab-content { display: none !important; height: calc(100vh - 47px); }
+.tab-content.active { display: block !important; overflow: hidden; }
 
 /* === MAP TAB LAYOUT === */
-#map-tab { position: relative; display: flex; flex-direction: column; }
+#map-tab { position: relative; flex-direction: column; display: none !important; }
+#map-tab.active { display: flex !important; }
 
 #header {
     display: flex;

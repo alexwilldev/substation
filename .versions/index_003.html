@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Substation — Data Centers in North Carolina</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+    <!-- Tab Navigation -->
+    <nav id="tab-nav">
+        <button class="tab-btn active" data-tab="map-tab">Map</button>
+        <button class="tab-btn" data-tab="scoring-tab">Scoring & Forecasting</button>
+        <button class="tab-btn" data-tab="sources-tab">Data Sources</button>
+        <button class="tab-btn about-btn" data-tab="about-tab">About</button>
+    </nav>
+
+    <!-- MAP TAB -->
+    <div id="map-tab" class="tab-content active">
+        <header id="header">
+            <div class="header-left">
+                <h1>Substation</h1>
+                <p class="subtitle">Data centers in North Carolina, and what they draw from the places around them</p>
+            </div>
+            <div class="header-right">
+                <input type="text" id="search-box" placeholder="Search by name, operator, or city…" autocomplete="off" />
+            </div>
+        </header>
+
+        <div id="map"></div>
+
+        <!-- Detail Panel -->
+        <div id="detail-panel" class="panel hidden">
+            <button id="close-panel" aria-label="Close panel">&times;</button>
+            <div id="panel-content"></div>
+        </div>
+
+        <!-- Add Data Panel -->
+        <div id="add-data-panel" class="panel hidden">
+            <button class="close-add-panel" aria-label="Close panel">&times;</button>
+            <h2>Add Impact Data</h2>
+            <form id="add-data-form">
+                <label>Facility
+                    <select id="form-facility" required></select>
+                </label>
+                <label>Impact Field
+                    <select id="form-field" required>
+                        <option value="">Select field…</option>
+                        <option value="power_mw">Power draw (MW)</option>
+                        <option value="water_gpd">Water use (gallons/day)</option>
+                        <option value="building_sqft">Building size (sq ft)</option>
+                        <option value="campus_acres">Campus size (acres)</option>
+                        <option value="noise_dba">Noise at property line (dBA)</option>
+                    </select>
+                </label>
+                <label>Value (number)
+                    <input type="number" id="form-value" step="any" required />
+                </label>
+                <label>Quoted sentence from source <span class="required">*required</span>
+                    <textarea id="form-quote" required placeholder="Copy the exact sentence from the document…"></textarea>
+                </label>
+                <label>Source URL <span class="required">*required</span>
+                    <input type="url" id="form-source-url" required placeholder="https://…" />
+                </label>
+                <label>Source title
+                    <input type="text" id="form-source-title" placeholder="Document or article title" />
+                </label>
+                <label>Confidence
+                    <select id="form-confidence">
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </label>
+                <button type="submit" class="btn-primary">Save Impact Data</button>
+            </form>
+        </div>
+
+        <!-- AI Document Reader Panel -->
+        <div id="ai-panel" class="panel hidden">
+            <button class="close-ai-panel" aria-label="Close panel">&times;</button>
+            <h2>Read a Document</h2>
+            <p class="panel-desc">Paste the text of a permit filing, utility document, or news article. The AI will extract impact values with verbatim quotes.</p>
+            <form id="ai-form">
+                <label>Facility
+                    <select id="ai-facility" required></select>
+                </label>
+                <label>Document text
+                    <textarea id="ai-document-text" required placeholder="Paste the full document text here…" rows="10"></textarea>
+                </label>
+                <button type="submit" class="btn-primary">Extract Values</button>
+            </form>
+            <div id="ai-results" class="hidden">
+                <h3>Extracted Values (review before saving)</h3>
+                <div id="ai-results-content"></div>
+                <button id="ai-confirm-save" class="btn-primary hidden">Confirm & Save All</button>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <footer id="status-bar">
+            <span id="status-text">17 facilities</span>
+            <div class="status-actions">
+                <button id="btn-add-data" class="btn-secondary">+ Add Impact Data</button>
+                <button id="btn-ai-reader" class="btn-secondary">🤖 Read a Document</button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- SCORING TAB -->
+    <div id="scoring-tab" class="tab-content">
+        <div class="page-content">
+            <h2>Environmental Risk Score & Impact Forecasting</h2>
+            <div class="scoring-grid">
+                <section class="card">
+                    <h3>Environmental Risk Score (0–100)</h3>
+                    <p>A composite index measuring the localized environmental burden of a data center on its surrounding community.</p>
+                    
+                    <h4>Score Components</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Component</th><th>Weight</th><th>Inputs</th><th>Rationale</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Energy Intensity</strong></td>
+                                <td>30%</td>
+                                <td>Power draw (MW), grid carbon intensity (gCO₂/kWh), renewable %</td>
+                                <td>Data centers can consume as much electricity as a small city. Grid mix determines whether that load drives fossil generation.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Water Stress</strong></td>
+                                <td>25%</td>
+                                <td>Water use (GPD), local watershed stress index, cooling type (evaporative vs. air vs. hybrid)</td>
+                                <td>Evaporative cooling in a drought-prone basin has outsized community impact vs. the same facility in a water-rich area.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Land & Habitat</strong></td>
+                                <td>20%</td>
+                                <td>Campus size (acres), prior land use (forest/farm/brownfield), proximity to protected areas</td>
+                                <td>Conversion of forested land or prime farmland is an irreversible loss; brownfield reuse scores better.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Noise & Nuisance</strong></td>
+                                <td>15%</td>
+                                <td>Noise at property line (dBA), distance to nearest residence, hours of operation</td>
+                                <td>Continuous low-frequency noise from generators and HVAC affects sleep and property values within the impact radius.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Community Burden</strong></td>
+                                <td>10%</td>
+                                <td>Tax incentives received, jobs created per MW, local infrastructure strain</td>
+                                <td>Public subsidy vs. public benefit — captures whether the community gets a fair return.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h4>Score Calculation</h4>
+                    <div class="formula-block">
+                        <code>Risk Score = Σ (component_weight × normalize(component_value, min, max))</code>
+                    </div>
+                    <p>Each component is normalized to 0–1 using regional baselines (NC-specific where available). A score of 0 = negligible impact; 100 = maximum observed impact in the dataset.</p>
+                    
+                    <h4>Score Bands</h4>
+                    <table class="data-table compact">
+                        <thead><tr><th>Score</th><th>Rating</th><th>Color</th></tr></thead>
+                        <tbody>
+                            <tr><td>0–20</td><td>Low Impact</td><td style="color:#4ade80">●</td></tr>
+                            <tr><td>21–40</td><td>Moderate</td><td style="color:#facc15">●</td></tr>
+                            <tr><td>41–60</td><td>Elevated</td><td style="color:#fb923c">●</td></tr>
+                            <tr><td>61–80</td><td>High</td><td style="color:#f87171">●</td></tr>
+                            <tr><td>81–100</td><td>Severe</td><td style="color:#dc2626">●</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="card">
+                    <h3>Impact Radius Forecasting</h3>
+                    <p>Estimate the geographic area affected by a facility based on its power capacity, cooling infrastructure, and terrain.</p>
+
+                    <h4>Radius Model</h4>
+                    <table class="data-table">
+                        <thead><tr><th>Impact Type</th><th>Base Radius</th><th>Scaling Factor</th><th>Modifiers</th></tr></thead>
+                        <tbody>
+                            <tr>
+                                <td>Noise propagation</td>
+                                <td>0.5 km</td>
+                                <td>+0.1 km per 10 MW</td>
+                                <td>Terrain (valley +30%, ridge −20%), vegetation density, time of day</td>
+                            </tr>
+                            <tr>
+                                <td>Thermal plume (air cooling)</td>
+                                <td>0.2 km</td>
+                                <td>+0.05 km per 10 MW</td>
+                                <td>Prevailing wind direction, ambient temp, stack height</td>
+                            </tr>
+                            <tr>
+                                <td>Water table drawdown</td>
+                                <td>1.0 km</td>
+                                <td>Aquifer-dependent</td>
+                                <td>Aquifer type (karst = wider), pump rate, seasonal recharge</td>
+                            </tr>
+                            <tr>
+                                <td>Grid strain zone</td>
+                                <td>Substation service area</td>
+                                <td>Proportional to MW / substation capacity</td>
+                                <td>Transmission line routing, peak demand overlap</td>
+                            </tr>
+                            <tr>
+                                <td>Traffic & construction</td>
+                                <td>Road network analysis</td>
+                                <td>Phase-dependent</td>
+                                <td>Construction duration, workforce size, road capacity</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h4>Visualization Concept</h4>
+                    <p>Each facility on the map can display concentric rings showing predicted impact radii by type. Rings are dashed when based on modeled estimates (no measured data) and solid when validated against field measurements.</p>
+
+                    <h4>Future Implementation</h4>
+                    <ul>
+                        <li>Monte Carlo simulation for uncertainty bounds on each radius</li>
+                        <li>Seasonal variation modeling (summer peak demand vs. winter baseline)</li>
+                        <li>Cumulative impact overlay when multiple facilities share a watershed or grid substation</li>
+                        <li>Community notification threshold — alert when modeled impact radius reaches populated areas</li>
+                    </ul>
+                </section>
+
+                <section class="card full-width">
+                    <h3>Scoring Methodology Notes</h3>
+                    <ul>
+                        <li><strong>Data requirement:</strong> A facility's risk score is only calculated when at least 3 of the 5 impact fields have sourced values. Partial scores are shown with a confidence band.</li>
+                        <li><strong>No estimation:</strong> Consistent with the app's core principle, missing data fields contribute zero to the score rather than being filled with averages or industry benchmarks.</li>
+                        <li><strong>Regional baselines:</strong> Normalization uses NC-specific thresholds from EPA, USGS, and Duke Energy service territory data where available.</li>
+                        <li><strong>Open methodology:</strong> All weights, formulas, and normalization bounds are documented in this tab and versioned in the repository. Community members can propose changes via GitHub Issues.</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- DATA SOURCES TAB -->
+    <div id="sources-tab" class="tab-content">
+        <div class="page-content">
+            <h2>Data Sources & Integrations</h2>
+            <p class="intro">The platform is designed to integrate public, open-licensed datasets. No private APIs or proprietary data are required.</p>
+
+            <div class="scoring-grid">
+                <section class="card">
+                    <h3>🗺️ Geospatial & Mapping</h3>
+                    <table class="data-table">
+                        <thead><tr><th>Source</th><th>Use</th><th>License</th><th>Access</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>OpenStreetMap</strong></td><td>Facility locations, building footprints, land use polygons</td><td>ODbL</td><td>Overpass API / bulk download</td></tr>
+                            <tr><td><strong>USGS National Map</strong></td><td>Elevation, terrain, hydrography for impact modeling</td><td>Public domain</td><td>REST API / WMS tiles</td></tr>
+                            <tr><td><strong>US Census TIGER/Line</strong></td><td>Census tracts, road networks, populated places for proximity analysis</td><td>Public domain</td><td>Bulk download / API</td></tr>
+                            <tr><td><strong>NLCD (National Land Cover Database)</strong></td><td>Prior land use classification (forest, farmland, developed)</td><td>Public domain</td><td>MRLC viewer / GeoTIFF</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="card">
+                    <h3>💧 Water & Environmental</h3>
+                    <table class="data-table">
+                        <thead><tr><th>Source</th><th>Use</th><th>License</th><th>Access</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>USGS Water Resources (NWIS)</strong></td><td>Streamflow, groundwater levels, watershed boundaries</td><td>Public domain</td><td>REST API</td></tr>
+                            <tr><td><strong>EPA ECHO</strong></td><td>Discharge permits (NPDES), compliance history, facility reports</td><td>Public domain</td><td>REST API</td></tr>
+                            <tr><td><strong>NC DEQ Water Withdrawal Registry</strong></td><td>Permitted water withdrawals by facility in NC</td><td>Public record</td><td>FOIA / published reports</td></tr>
+                            <tr><td><strong>WRI Aqueduct</strong></td><td>Local water stress index, baseline water risk</td><td>CC BY 4.0</td><td>REST API / download</td></tr>
+                            <tr><td><strong>EPA Greenhouse Gas Reporting (GHGRP)</strong></td><td>Facility-level emissions for backup power generators</td><td>Public domain</td><td>FLIGHT tool / API</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="card">
+                    <h3>⚡ Energy & Grid</h3>
+                    <table class="data-table">
+                        <thead><tr><th>Source</th><th>Use</th><th>License</th><th>Access</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>EIA-860 / EIA-861</strong></td><td>Power plant locations, utility service territories, generation mix</td><td>Public domain</td><td>Bulk download / API</td></tr>
+                            <tr><td><strong>EPA eGRID</strong></td><td>Grid carbon intensity by subregion (SRVC for NC)</td><td>Public domain</td><td>Download / Excel</td></tr>
+                            <tr><td><strong>HIFLD (Homeland Infrastructure)</strong></td><td>Substation locations, transmission lines</td><td>Public domain</td><td>ArcGIS Hub</td></tr>
+                            <tr><td><strong>NC Utilities Commission filings</strong></td><td>Rate cases, capacity planning documents, interconnection requests</td><td>Public record</td><td>NCUC docket search</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="card">
+                    <h3>🏗️ Permits & Land Records</h3>
+                    <table class="data-table">
+                        <thead><tr><th>Source</th><th>Use</th><th>License</th><th>Access</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>County GIS portals</strong></td><td>Parcel boundaries, zoning, building permits, property ownership</td><td>Public record</td><td>County-specific portals</td></tr>
+                            <tr><td><strong>NC OneMap</strong></td><td>Statewide GIS layers (parcels, zoning, protected lands)</td><td>Public domain</td><td>WMS/WFS services</td></tr>
+                            <tr><td><strong>FEMA NFHL</strong></td><td>Flood zones for site risk assessment</td><td>Public domain</td><td>Map service / bulk</td></tr>
+                            <tr><td><strong>NC Secretary of State (SOSNC)</strong></td><td>Corporate entity ownership, registered agents</td><td>Public record</td><td>Web search</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="card">
+                    <h3>🛰️ Satellite & Remote Sensing</h3>
+                    <table class="data-table">
+                        <thead><tr><th>Source</th><th>Use</th><th>License</th><th>Access</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Sentinel-2 (ESA Copernicus)</strong></td><td>Land change detection, construction monitoring, vegetation loss</td><td>CC BY-SA 3.0 IGO</td><td>Copernicus Open Access Hub</td></tr>
+                            <tr><td><strong>Landsat (USGS/NASA)</strong></td><td>Historical land use change, thermal imaging for heat islands</td><td>Public domain</td><td>EarthExplorer / GEE</td></tr>
+                            <tr><td><strong>VIIRS Night Lights (NOAA)</strong></td><td>Light pollution proxy for facility operational status</td><td>Public domain</td><td>NOAA NCEI</td></tr>
+                            <tr><td><strong>OpenAerialMap</strong></td><td>High-resolution aerial imagery where available</td><td>CC BY 4.0</td><td>OAM browser</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="card">
+                    <h3>📊 Public APIs for Integration</h3>
+                    <table class="data-table">
+                        <thead><tr><th>API</th><th>Purpose</th><th>Rate Limit</th><th>Auth</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>Overpass API</strong></td><td>Query OSM for data center features</td><td>Reasonable use</td><td>None</td></tr>
+                            <tr><td><strong>USGS Water Services</strong></td><td>Real-time and historical streamflow/groundwater</td><td>Generous</td><td>None</td></tr>
+                            <tr><td><strong>EPA ECHO API</strong></td><td>Facility environmental compliance data</td><td>Standard</td><td>None</td></tr>
+                            <tr><td><strong>EIA Open Data API</strong></td><td>Energy generation, consumption, grid data</td><td>Standard</td><td>Free API key</td></tr>
+                            <tr><td><strong>Census Geocoder</strong></td><td>Address/coordinate lookup, census tract identification</td><td>Standard</td><td>None</td></tr>
+                            <tr><td><strong>NWS API</strong></td><td>Weather data for thermal modeling</td><td>Generous</td><td>None</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <section class="card full-width">
+                    <h3>Integration Architecture (Future)</h3>
+                    <p>For a production deployment beyond the GitHub Pages demo, the following architecture would support live data integration:</p>
+                    <ul>
+                        <li><strong>Static layer (current):</strong> All 17 facilities with manually-researched impact data stored in localStorage / embedded JSON. Served via GitHub Pages.</li>
+                        <li><strong>API layer (future):</strong> Serverless functions (AWS Lambda or Cloudflare Workers) that periodically fetch from USGS, EPA, and EIA APIs to update environmental context layers.</li>
+                        <li><strong>Satellite pipeline (future):</strong> Google Earth Engine scripts that monitor construction activity at known facility coordinates using Sentinel-2 change detection.</li>
+                        <li><strong>Community layer:</strong> GitHub Issues as a lightweight CMS — structured issue templates for submitting new impact data with required source citations.</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- ABOUT TAB -->
+    <div id="about-tab" class="tab-content">
+        <div class="page-content">
+            <div class="card" style="max-width: 700px; margin: 0 auto;">
+                <h2>About Substation</h2>
+                <p><strong>Substation</strong> is an open-source civic transparency tool that tracks the environmental and community impact of data centers in North Carolina.</p>
+                
+                <h3>Why this exists</h3>
+                <p>Data centers are being built across North Carolina faster than communities can evaluate them. When one is proposed nearby, people want to know what it will draw from the area — how much electricity, how much water for cooling, how loud it will be at the property line. Those figures exist but they're buried in county permit filings, utility rate cases, and local news coverage. No database collects them. This app is that database, built in public.</p>
+
+                <h3>Data provenance</h3>
+                <ul>
+                    <li><strong>Facility locations</strong> come from <a href="https://www.openstreetmap.org" target="_blank">OpenStreetMap</a> contributors, licensed under the <a href="https://opendatacommons.org/licenses/odbl/" target="_blank">Open Data Commons Open Database License (ODbL)</a>.</li>
+                    <li><strong>Impact figures</strong> (power draw, water use, building size, campus size, noise) are extracted from publicly available documents: county permit filings, utility commission rate cases, environmental impact assessments, and local news coverage.</li>
+                    <li><strong>Every figure links to its source.</strong> Each data point shows the verbatim quoted sentence from the source document, a link to that document, and a confidence rating.</li>
+                </ul>
+
+                <h3>Principles</h3>
+                <ul>
+                    <li>No estimates. No averages. No industry benchmarks filling empty fields.</li>
+                    <li>An empty field is honest. A plausible guess is a fabrication about a real building in a real neighborhood.</li>
+                    <li>Every number must have a quoted source sentence and a URL. If it doesn't, it's not shown.</li>
+                </ul>
+
+                <h3>Contributing</h3>
+                <p>Use the "Add Impact Data" button to contribute researched figures. You'll need the exact quote from a source document and a URL. Contributions are stored locally and shared with other users of the app.</p>
+
+                <h3>License</h3>
+                <p>This application is open source. Data contributed to the platform is licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC BY-SA 4.0</a>.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/panels.js"></script>
+    <script src="js/ai-reader.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
